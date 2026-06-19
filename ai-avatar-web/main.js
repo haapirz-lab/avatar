@@ -73,6 +73,9 @@ let avatarList = [
         handle: '@amara_ug',
         bio: 'Friendly bilingual tutor for English and Japanese.',
         file: '/assets/avatars/sample_a.vrm',
+        // Picture shown in the "Discover" list. Drop your own image here
+        // (any /assets/... path or full URL); falls back to a color if missing.
+        image: '/assets/thumbs/avatar-uganda-female.svg',
         culture: 'en',
     },
     {
@@ -81,6 +84,7 @@ let avatarList = [
         handle: '@kwame_ug',
         bio: 'Advanced native instruction specialist.',
         file: '/assets/avatars/sample_b.vrm',
+        image: '/assets/thumbs/avatar-uganda-male.svg',
         culture: 'en',
     },
     {
@@ -89,6 +93,7 @@ let avatarList = [
         handle: '@yuki_jp',
         bio: 'Warm Japanese companion for everyday conversation.',
         file: '/assets/avatars/sample_a.vrm',
+        image: '/assets/thumbs/avatar-japan-female.svg',
         culture: 'ja',
     },
     {
@@ -97,6 +102,7 @@ let avatarList = [
         handle: '@kenji_jp',
         bio: 'Linguistic acquisition mentor.',
         file: '/assets/avatars/sample_b.vrm',
+        image: '/assets/thumbs/avatar-japan-male.svg',
         culture: 'ja',
     },
 ];
@@ -200,7 +206,7 @@ function applyBehavior(data) {
 }
 
 // ── Avatar creator (preset-based, no external iframe) ─────────────────────────
-function createAvatar({ name, style, culture, bio }) {
+function createAvatar({ name, style, culture, bio, image }) {
     const id = 'custom-' + Date.now();
 
     // Map style + culture to one of the local VRM files.
@@ -213,12 +219,17 @@ function createAvatar({ name, style, culture, bio }) {
     };
     const file = fileMap[style] || '/assets/avatars/sample_a.vrm';
 
+    // Picture: use the one the user picked, else a default per chosen style.
+    // This is what "automatically adds a picture when the avatar is made".
+    const thumb = image || `/assets/thumbs/style-${style}.svg`;
+
     const avatar = {
         id,
         name,
         handle: '@' + name.toLowerCase().replace(/\s+/g, '_'),
         bio,
         file,
+        image: thumb,
         culture,
     };
     avatarList.push(avatar);

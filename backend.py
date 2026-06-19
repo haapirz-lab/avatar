@@ -1,8 +1,8 @@
 """
 Akademia AI Avatar — Backend v5
-Stack: FastAPI · ChatGPT (OpenAI) · Edge-TTS · HuggingFace DistilBERT
+Stack: FastAPI · Groq (LLM) · Edge-TTS · HuggingFace DistilBERT
 
-The backend is the BRAIN. It receives text + persona, asks ChatGPT for a
+The backend is the BRAIN. It receives text + persona, asks the LLM for a
 single structured "behavior" describing what the avatar should say and do,
 translates it, synthesizes voice with a viseme (lip-sync) timeline, and
 returns ONE unified JSON the frontend maps directly onto the avatar.
@@ -36,16 +36,44 @@ import edge_tts
 
 from openai import OpenAI
 
-# ── OpenAI config ──────────────────────────────────────────────────────────
-# NEVER hardcode the key. Provide it via the OPENAI_API_KEY environment variable.
+# ── LLM config (Groq by default, OpenAI as optional fallback) ───────────────
+# Groq exposes an OpenAI-compatible API, so we reuse the official `openai`
+# client and simply point it at Groq's base URL with your GROQ_API_KEY.
+#
+# NEVER hardcode the key. Put it in the .env file:
+#   GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxx
+#   GROQ_MODEL=llama-3.3-70b-versatile          # optional
+#
+# If you ever want to switch back to OpenAI, set LLM_PROVIDER=openai and provide
+# OPENAI_API_KEY instead.
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq").strip().lower()
+
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_BASE_URL = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+if LLM_PROVIDER == "openai":
+    LLM_API_KEY = OPENAI_API_KEY
+    LLM_MODEL = OPENAI_MODEL
+    LLM_BASE_URL = None  # default OpenAI endpoint
+else:  # "groq" (default)
+    LLM_PROVIDER = "groq"
+    LLM_API_KEY = GROQ_API_KEY
+    LLM_MODEL = GROQ_MODEL
+    LLM_BASE_URL = GROQ_BASE_URL
+
+llm_client = (
+    OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
+    if LLM_API_KEY
+    else None
+)
 
 
 def ai_available() -> bool:
-    return openai_client is not None
+    return llm_client is not None
 
 
 # ── Voice catalog ──────────────────────────────────────────────────────────
@@ -166,15 +194,18 @@ def _strip_fences(raw: str) -> str:
 
 
 async def openai_chat(messages: list, json_mode: bool = False) -> str:
-    """Async wrapper around the (sync) OpenAI client."""
+    """Async wrapper around the (sync) OpenAI-compatible client (Groq/OpenAI)."""
     if not ai_available():
-        raise RuntimeError("OPENAI_API_KEY is not set on the server.")
+        raise RuntimeError(
+            f"No API key set for provider '{LLM_PROVIDER}'. "
+            "Set GROQ_API_KEY (or OPENAI_API_KEY) in your .env."
+        )
     loop = asyncio.get_event_loop()
-    kwargs = {"model": OPENAI_MODEL, "messages": messages}
+    kwargs = {"model": LLM_MODEL, "messages": messages}
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
     response = await loop.run_in_executor(
-        None, lambda: openai_client.chat.completions.create(**kwargs)
+        None, lambda: llm_client.chat.completions.create(**kwargs)
     )
     return response.choices[0].message.content
 
@@ -263,7 +294,7 @@ async def think(user_text: str, persona: dict, history: list) -> dict:
     """
     if not ai_available():
         return {
-            "reply": f'(offline echo) "{user_text}". Set OPENAI_API_KEY to enable ChatGPT.',
+            "reply": f'(offline echo) "{user_text}". Set GROQ_API_KEY to enable the AI.',
             **sentiment_behavior(user_text),
         }
 
@@ -341,7 +372,12 @@ class VoiceRequest(BaseModel):
 # ── Endpoints ──────────────────────────────────────────────────────────────
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "model": OPENAI_MODEL, "ai_enabled": ai_available()}
+    return {
+        "status": "ok",
+        "provider": LLM_PROVIDER,
+        "model": LLM_MODEL,
+        "ai_enabled": ai_available(),
+    }
 
 
 @app.post("/ask")

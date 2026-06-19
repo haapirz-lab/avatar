@@ -23,6 +23,7 @@ export class Controls {
     this.recognizer = null;
     this.recording  = false;
     this.lang       = 'en-US';
+    this._studioImage = null;   // data URL of a picture chosen in the creator
   }
 
   init() {
@@ -94,6 +95,18 @@ export class Controls {
     document.getElementById('launch-studio-btn')?.addEventListener('click', () => this.openStudio());
     document.getElementById('close-studio-btn')?.addEventListener('click',  () => this.closeStudio());
     document.getElementById('save-studio-avatar-btn')?.addEventListener('click', () => this.saveStudioAvatar());
+    // Optional picture upload — reads the chosen file into a preview + data URL.
+    document.getElementById('studio-avatar-image')?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      const preview = document.getElementById('studio-image-preview');
+      if (!file) { this._studioImage = null; if (preview) preview.style.backgroundImage = ''; return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        this._studioImage = reader.result;
+        if (preview) preview.style.backgroundImage = `url("${reader.result}")`;
+      };
+      reader.readAsDataURL(file);
+    });
     // The second cancel button and tile logic are in index.html inline script
     // (needed before the module loads). Nothing extra needed here.
   }
@@ -101,10 +114,13 @@ export class Controls {
   openStudio() {
     document.getElementById('avatar-modal')?.classList.remove('open');
     // Reset form fields
-    ['studio-avatar-name', 'studio-avatar-bio'].forEach((id) => {
+    ['studio-avatar-name', 'studio-avatar-bio', 'studio-avatar-image'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
+    this._studioImage = null;
+    const preview = document.getElementById('studio-image-preview');
+    if (preview) preview.style.backgroundImage = '';
     // Reset style tiles to first option
     const tiles  = document.querySelectorAll('.style-tile');
     const hidden = document.getElementById('studio-avatar-style');
@@ -132,7 +148,7 @@ export class Controls {
       document.getElementById('studio-avatar-name')?.focus();
       return;
     }
-    this.h.onCreateAvatar?.({ name, style, culture, bio });
+    this.h.onCreateAvatar?.({ name, style, culture, bio, image: this._studioImage });
     this.closeStudio();
   }
 
@@ -233,6 +249,16 @@ export class Controls {
     this._switchTab(tab);
   }
 
+  // Builds a thumbnail that shows a picture when one is available and
+  // gracefully falls back to a colored gradient if the image is missing.
+  _thumbHtml(imageUrl, gradient) {
+    const img = imageUrl
+      ? `<img class="pick-thumb-img" src="${imageUrl}" alt="" loading="lazy"
+             onload="this.classList.add('loaded')" onerror="this.remove()" />`
+      : '';
+    return `<div class="pick-thumb" style="background:${gradient}">${img}</div>`;
+  }
+
   buildAvatarStack() {
     const grid = document.getElementById('avatar-picker-grid');
     if (!grid) return;
@@ -246,9 +272,10 @@ export class Controls {
       card.className = `pick-card${a.id === currentId ? ' active' : ''}`;
       const tint     = palette[i % palette.length];
       const isCustom = a.id.startsWith('custom-');
+      const gradient = `radial-gradient(circle at 30% 30%,${tint},#0b0b14)`;
 
       card.innerHTML = `
-        <div class="pick-thumb" style="background:radial-gradient(circle at 30% 30%,${tint},#0b0b14)"></div>
+        ${this._thumbHtml(a.image, gradient)}
         <div class="pick-card-body">
           <div class="pick-card-title">${a.name}${isCustom ? ' <span style="font-size:0.58em;opacity:0.55">(Custom)</span>' : ''}</div>
           <div class="pick-card-desc">${a.bio}</div>
@@ -296,6 +323,9 @@ export class Controls {
     document.getElementById('tab-content-characters')?.classList.toggle('active', !scen);
     const title = document.getElementById('modal-title');
     if (title) title.textContent = scen ? 'Discover New Scenarios' : 'Discover New Characters';
+    // "Create Avatar" belongs to Characters only — hide it on the Scenario tab.
+    const studioBtn = document.getElementById('launch-studio-btn');
+    if (studioBtn) studioBtn.style.display = scen ? 'none' : '';
     if (!scen) this.buildAvatarStack();   // refresh whenever Characters tab opens
   }
 
