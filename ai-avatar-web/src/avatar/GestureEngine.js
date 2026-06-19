@@ -141,15 +141,21 @@ export class GestureEngine {
         const desired = this._poseFor(active, t);
 
         // Idle adds a subtle breathing sway and natural micro-movements always.
+        // The arm values bring the upper arms DOWN to the sides so the avatar
+        // rests in a natural pose instead of the VRM default T-pose. (A VRM's
+        // rest pose has arms straight out; ~1.15 rad on Z lowers them.)
         const breathe = Math.sin(t * 1.6) * 0.03;
         const microHead = Math.sin(t * 2.3) * 0.02;
         const microShoulder = Math.sin(t * 1.8 + 0.5) * 0.015;
+        const ARM_DOWN = 1.25;   // how far to drop the upper arms from T-pose
         const idle = {
             chest: [breathe, 0, 0],
             spine: [breathe * 0.6, 0, 0],
             head: [microHead, 0, Math.sin(t * 1.9) * 0.015],
-            rightUpperArm: [0, microShoulder * 0.3, -0.1],
-            leftUpperArm: [0, -microShoulder * 0.3, 0.1],
+            rightUpperArm: [0.05, microShoulder * 0.3,  ARM_DOWN],
+            leftUpperArm:  [0.05, -microShoulder * 0.3, -ARM_DOWN],
+            rightLowerArm: [0, 0,  0.18],   // slight, natural elbow bend
+            leftLowerArm:  [0, 0, -0.18],
         };
 
         const speed = 8;
